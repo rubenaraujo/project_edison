@@ -1,0 +1,4 @@
+{
+  "audio_retention_days": 30,
+  "keep_raw_tracks": false
+}

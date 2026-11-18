@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key><string>local.rubenaraujo.edison</string>
+    <key>CFBundleName</key><string>Edison</string>
+    <key>CFBundleExecutable</key><string>Edison</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleIconFile</key><string>Edison</string>
+    <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+    <key>LSUIElement</key><true/>
+    <key>LSMinimumSystemVersion</key><string>15.0</string>
+    <key>NSMicrophoneUsageDescription</key><string>Record your voice during Microsoft Teams calls.</string>
+</dict>
+</plist>

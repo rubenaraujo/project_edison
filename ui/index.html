@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edison</title>
+<meta name="color-scheme" content="light dark">
+<style>
+:root{--bg:#fff;--side:#f2f2f5;--panel:#fff;--line:#e3e3e8;--text:#1d1d1f;--dim:#6e6e73;--accent:#0a84ff;--hover:#ececf0;--sel:#dbe9ff;--red:#ff3b30;--green:#30b350;--orange:#ff9f0a;--shadow:0 10px 40px rgba(0,0,0,.2)}
+@media(prefers-color-scheme:dark){:root{--bg:#1e1e1e;--side:#262628;--panel:#1e1e1e;--line:#38383a;--text:#f5f5f7;--dim:#98989d;--hover:#2c2c2e;--sel:#0a3a73;--shadow:0 10px 40px rgba(0,0,0,.6)}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;color:var(--text);background:var(--bg);display:flex;overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+#side{width:200px;background:var(--side);border-right:1px solid var(--line);padding:18px 10px 12px;display:flex;flex-direction:column;gap:2px;flex:none;-webkit-app-region:drag}
+#side h1{font-size:16px;margin:0 6px 14px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+#side h1 img{width:30px;height:30px;border-radius:7px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:7px;cursor:pointer;border:0;background:none;text-align:left;width:100%}
+.nav:hover{background:var(--hover)}.nav.on{background:var(--sel)}
+.badge{background:var(--red);color:#fff;border-radius:9px;font-size:11px;min-width:18px;text-align:center;padding:0 5px;font-weight:600}
+#state{margin-top:auto;padding:8px;font-size:12px;color:var(--dim)}
+#state .row{display:flex;gap:6px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}.dot.busy{background:var(--orange);animation:p 1.2s infinite}
+@keyframes p{50%{opacity:.3}}
+#main{flex:1;min-width:0;display:flex}
+.col{display:flex;flex-direction:column;min-width:0}
+#list{width:340px;border-right:1px solid var(--line);flex:none}
+#detail{flex:1}
+.bar{padding:18px 12px 8px;display:flex;gap:6px;flex-direction:column;-webkit-app-region:drag}
+.bar>*{-webkit-app-region:no-drag}
+.search{width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);outline:none}
+.search:focus{border-color:var(--accent)}
+.seg{display:flex;gap:2px;background:var(--side);padding:2px;border-radius:8px}
+.seg button{flex:1;border:0;background:none;padding:3px 6px;border-radius:6px;cursor:pointer;font-size:12px}
+.seg button.on{background:var(--bg);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.tools{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim);min-height:26px}
+.btn{border:1px solid var(--line);background:var(--bg);padding:4px 11px;border-radius:7px;cursor:pointer}
+.btn:hover{background:var(--hover)}.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}.btn.danger{color:var(--red)}
+.btn:disabled{opacity:.4;pointer-events:none}
+.scroll{overflow:auto;flex:1}
+.day{padding:10px 14px 4px;font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:var(--bg)}
+.item{display:flex;gap:8px;padding:9px 12px;margin:1px 6px;border-radius:8px;cursor:pointer;align-items:flex-start}
+.item:hover{background:var(--hover)}.item.on{background:var(--sel)}
+.item input{margin-top:3px}
+.item .b{min-width:0;flex:1}
+.t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t.dim{color:var(--dim);font-weight:500;font-style:italic}
+.d{color:var(--dim);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.m{color:var(--dim);font-size:11px;margin-top:2px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{font-size:10px;padding:0 6px;border-radius:8px;background:var(--hover);color:var(--dim);font-weight:600}
+.pill.red{background:var(--red);color:#fff}.pill.or{background:var(--orange);color:#fff}
+mark{background:#ffe066;color:#000;border-radius:2px}
+.empty{color:var(--dim);text-align:center;padding:60px 20px}
+.head{padding:18px 24px 12px;border-bottom:1px solid var(--line);-webkit-app-region:drag}
+.head>*{-webkit-app-region:no-drag}
+.head h2{margin:0;font-size:20px;letter-spacing:-.01em;cursor:text}
+.head .d{-webkit-line-clamp:3;font-size:13px;margin-top:4px}
+.head .acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.player{display:flex;gap:10px;align-items:center;margin-top:12px}
+.player audio{flex:1;height:32px}
+.tabs{display:flex;gap:2px;padding:8px 20px 0;border-bottom:1px solid var(--line)}
+.tab{border:0;background:none;padding:6px 12px;cursor:pointer;border-bottom:2px solid transparent;color:var(--dim)}
+.tab.on{color:var(--text);border-color:var(--accent)}
+.body{padding:16px 24px 40px;overflow:auto;flex:1;max-width:820px}
+.md h3{margin:18px 0 6px;font-size:14px}.md ul{margin:4px 0;padding-left:20px}.md p{margin:6px 0}
+.u{display:flex;gap:10px;padding:5px 8px;border-radius:7px;cursor:pointer}
+.u:hover{background:var(--hover)}.u.now{background:var(--sel)}
+.u .ts{color:var(--dim);font-variant-numeric:tabular-nums;font-size:11px;width:46px;flex:none;padding-top:2px}
+.u .w{width:84px;flex:none;font-weight:600;font-size:12px;padding-top:1px;overflow:hidden;text-overflow:ellipsis}
+.u.me .w{color:var(--accent)}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+.card h4 .btn,.card h4 a{font-weight:400}
+.card h4{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+.clip{display:flex;gap:8px;align-items:center;margin:4px 0;font-size:12px;color:var(--dim)}
+.clip audio{height:28px;width:200px;flex:none}
+.sel,.field{padding:4px 8px;border-radius:7px;border:1px solid var(--line);background:var(--bg);outline:none}
+.field:focus{border-color:var(--accent)}
+.rowf{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center}
+.people{padding:18px 24px 24px;overflow:auto;flex:1;max-width:760px}
+.people h2,.rev h2{margin:0 0 14px}
+.print{display:flex;gap:8px;align-items:center;padding:3px 0;font-size:12px;color:var(--dim)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:9}
+.modal .box{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:20px;width:380px;box-shadow:var(--shadow)}
+.modal h3{margin:0 0 6px}.modal p{color:var(--dim);margin:0 0 14px}
+.modal .rowf{justify-content:flex-end}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#323236;color:#fff;padding:8px 16px;border-radius:20px;z-index:10;opacity:0;transition:.2s;pointer-events:none}
+#toast.on{opacity:1}
+.rev{padding:18px 24px 24px;overflow:auto;flex:1;max-width:760px}
+</style>
+</head>
+<body>
+<div id="side">
+  <h1><img src="/logo.png" alt="">Edison</h1>
+  <button class="nav on" data-v="calls">Calls</button>
+  <button class="nav" data-v="review">Review <span class="badge" id="bRev" hidden></span></button>
+  <button class="nav" data-v="people">People</button>
+  <div id="state"></div>
+  <button class="nav" id="openFolder">Open folder</button>
+</div>
+<div id="main"></div>
+<div id="toast"></div>
+<script>
+const TOKEN="__TOKEN__";
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const S={view:"calls",q:"",filter:"all",sel:null,checked:new Set(),tab:"summary",calls:[],status:{},detail:null,people:[],review:null};
+let player=null,qTimer=null;
+
+async function api(path,body){
+  const opt=body===undefined?{}:{method:"POST",headers:{"X-Edison-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(body)};
+  const r=await fetch(path,opt);const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||("HTTP "+r.status));return j;
+}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove("on"),2600)}
+async function run(fn){try{return await fn()}catch(e){toast(e.message)}}
+function modal({title,text,ok="OK",danger=false,input=null,options=null,cancel=true}){
+  return new Promise(res=>{
+    const m=document.createElement("div");m.className="modal";
+    m.innerHTML=`<div class="box"><h3>${esc(title)}</h3><p>${esc(text||"")}</p>${input!==null?`<input class="field" style="width:100%;margin-bottom:14px" value="${esc(input)}">`:""}${options?`<select class="sel" style="width:100%;margin-bottom:14px">${options.map(o=>`<option value="${esc(o.v)}">${esc(o.l)}</option>`).join("")}</select>`:""}<div class="rowf">${cancel?'<button class="btn" data-r="0">Cancel</button>':""}<button class="btn ${danger?"danger":"pri"}" data-r="1">${esc(ok)}</button></div></div>`;
+    document.body.appendChild(m);const f=$("input",m)||$("select",m);if(f){f.focus();f.select&&f.select()}
+    const done=v=>{m.remove();res(v)};
+    m.onclick=e=>{if(e.target===m)done(null);const r=e.target.dataset?.r;if(r!==undefined)done(r==="1"?(f?f.value:true):null)};
+    m.onkeydown=e=>{if(e.key==="Enter")done(f?f.value:true);if(e.key==="Escape")done(null)};
+    m.tabIndex=-1;if(!f)m.focus();
+  });
+}
+const fmtDur=s=>{if(!s)return"";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?`${h}h ${m}m`:m?`${m} min`:`${s}s`};
+const fmtT=t=>{t=Math.floor(t);return `${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`};
+function dayLabel(d){const t=new Date();const iso=x=>x.toISOString().slice(0,10);const loc=x=>new Date(x.getTime()-x.getTimezoneOffset()*6e4);
+  const today=iso(loc(t)),y=iso(loc(new Date(t-864e5)));if(d===today)return"Today";if(d===y)return"Yesterday";
+  return new Date(d+"T12:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
+function hl(text){const q=S.q.trim();if(!q)return esc(text);let o=esc(text);
+  for(const w of q.split(/\s+/).filter(Boolean)){const re=new RegExp("("+esc(w).replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","gi");o=o.replace(re,"<mark>$1</mark>")}return o}
+function md(t){if(!t)return"";const out=[];let ul=false;
+  for(const l of t.split("\n")){let m;
+    if(m=l.match(/^#{1,4}\s+(.*)/)){if(ul){out.push("</ul>");ul=false}out.push(`<h3>${esc(m[1])}</h3>`)}
+    else if(m=l.match(/^\s*[-*]\s+(.*)/)){if(!ul){out.push("<ul>");ul=true}out.push(`<li>${esc(m[1]).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")}</li>`)}
+    else if(l.trim()){if(ul){out.push("</ul>");ul=false}out.push(`<p>${esc(l).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")}</p>`)}}
+  if(ul)out.push("</ul>");return out.join("")}
+
+/* ---------- data ---------- */
+async function loadCalls(){
+  const j=await api(`/api/calls?q=${encodeURIComponent(S.q)}&filter=${S.filter}`);
+  S.calls=j.calls;S.status=j.status;
+  const ids=new Set(S.calls.map(c=>c.id));S.checked=new Set([...S.checked].filter(i=>ids.has(i)));
+  renderState();
+}
+function renderState(){
+  const s=S.status,busy=s.processing>0;
+  $("#state").innerHTML=`<div class="row"><span class="dot ${busy?"busy":""}"></span>${busy?"Processing"+(s.waiting?` (+${s.waiting} waiting)`:""):"Idle"}</div>`+
+    (s.pending||s.failed?`<div style="margin-top:6px"><a href="#" id="runPend" style="color:var(--accent);text-decoration:none">Process ${s.pending+s.failed} unprocessed</a></div>`:"");
+  const b=$("#bRev");b.hidden=!s.review;b.textContent=s.review;
+  const rp=$("#runPend");if(rp)rp.onclick=e=>{e.preventDefault();run(async()=>{await api("/api/calls/process-pending",{});toast("Processing started");tick()})};
+}
+
+/* ---------- calls view ---------- */
+function renderCalls(){
+  $("#main").innerHTML=`
+  <div class="col" id="list"><div class="bar">
+    <input class="search" id="q" placeholder="Search calls, people, words…" value="${esc(S.q)}">
+    <div class="seg" id="flt">${[["all","All"],["review","To review"],["attention","Unprocessed"]].map(([k,l])=>`<button data-f="${k}" class="${S.filter===k?"on":""}">${l}</button>`).join("")}</div>
+    <div class="tools" id="tools"></div></div>
+    <div class="scroll" id="items"></div></div>
+  <div class="col" id="detail"></div>`;
+  $("#q").oninput=e=>{S.q=e.target.value;clearTimeout(qTimer);qTimer=setTimeout(async()=>{await run(loadCalls);renderItems();renderTools()},200)};
+  $("#flt").onclick=async e=>{const f=e.target.dataset.f;if(!f)return;S.filter=f;await run(loadCalls);renderCalls()};
+  renderItems();renderTools();renderDetail();
+}
+function statusPill(c){
+  if(c.status==="processing")return'<span class="pill or">Processing…</span>';
+  if(c.status==="pending")return'<span class="pill or">Not processed</span>';
+  if(c.status==="failed")return'<span class="pill red">Failed</span>';
+  if(c.status==="empty")return'<span class="pill">No audio</span>';
+  return c.pending?`<span class="pill red">${c.pending} to identify</span>`:"";
+}
+function renderItems(){
+  const box=$("#items");if(!box)return;
+  if(!S.calls.length){box.innerHTML=`<div class="empty">${S.q||S.filter!=="all"?"No calls match.":"No calls yet. Edison records automatically when a Teams call starts."}</div>`;return}
+  let html="",day="";
+  for(const c of S.calls){
+    if(c.day!==day){day=c.day;html+=`<div class="day">${esc(dayLabel(day))}</div>`}
+    const title=c.title||(c.status==="ready"?"Untitled call":"Call "+c.time);
+    html+=`<div class="item ${S.sel===c.id?"on":""}" data-id="${c.id}">
+      <input type="checkbox" ${S.checked.has(c.id)?"checked":""}>
+      <div class="b"><div class="t ${c.title?"":"dim"}">${hl(title)}</div>
+      ${c.description?`<div class="d">${hl(c.description)}</div>`:""}
+      ${c.snippet?`<div class="d">“${hl(c.snippet.text)}”</div>`:""}
+      <div class="m"><span>${c.time}</span>${c.duration?`<span>${fmtDur(c.duration)}</span>`:""}${c.speakers.length?`<span>${esc(c.speakers.join(", "))}</span>`:""}${statusPill(c)}</div></div></div>`;
+  }
+  box.innerHTML=html;
+  box.onclick=e=>{const it=e.target.closest(".item");if(!it)return;const id=it.dataset.id;
+    if(e.target.tagName==="INPUT"){e.target.checked?S.checked.add(id):S.checked.delete(id);renderTools();return}
+    S.sel=id;S.tab=S.tab||"summary";box.querySelectorAll(".item").forEach(x=>x.classList.toggle("on",x.dataset.id===id));openCall(id)};
+}
+function renderTools(){
+  const t=$("#tools");if(!t)return;const n=S.checked.size;
+  if(!n){t.innerHTML=`<span>${S.calls.length} call${S.calls.length===1?"":"s"}</span><span style="flex:1"></span><button class="btn" id="selAll">Select all</button>`;
+    $("#selAll").onclick=()=>{S.calls.forEach(c=>S.checked.add(c.id));renderItems();renderTools()};return}
+  t.innerHTML=`<span>${n} selected</span><span style="flex:1"></span><button class="btn" id="bRe">Reprocess</button><button class="btn" id="bDe">Describe</button><button class="btn danger" id="bDel">Delete</button><button class="btn" id="bNo">✕</button>`;
+  const ids=()=>[...S.checked];
+  $("#bNo").onclick=()=>{S.checked.clear();renderItems();renderTools()};
+  $("#bRe").onclick=async()=>{if(!await modal({title:`Reprocess ${n} call${n>1?"s":""}?`,text:"Transcripts are rebuilt from the audio. Speaker assignments in these calls are re-matched against known voices.",ok:"Reprocess"}))return;
+    run(async()=>{await api("/api/calls/reprocess",{ids:ids()});S.checked.clear();toast("Reprocessing started");tick()})};
+  $("#bDe").onclick=()=>run(async()=>{await api("/api/calls/describe",{ids:ids()});S.checked.clear();toast("Generating descriptions");tick()});
+  $("#bDel").onclick=async()=>{if(!await modal({title:`Delete ${n} call${n>1?"s":""}?`,text:"They are moved to the Trash, so you can still restore them from there.",ok:"Move to Trash",danger:true}))return;
+    run(async()=>{await api("/api/calls/delete",{ids:ids()});if(ids().includes(S.sel)){S.sel=null;S.detail=null}S.checked.clear();await loadCalls();renderCalls()})};
+}
+
+/* ---------- detail ---------- */
+async function openCall(id){S.detail=await run(()=>api("/api/call?id="+encodeURIComponent(id)))||null;renderDetail()}
+function renderDetail(){
+  const box=$("#detail");if(!box)return;const c=S.detail;
+  if(!c){box.innerHTML='<div class="empty" style="margin:auto">Select a call</div>';return}
+  const ready=c.status==="ready";
+  box.innerHTML=`<div class="head"><h2 id="ttl" title="Click to rename">${esc(c.title||(ready?"Untitled call":"Call "+c.time))}</h2>
+    ${c.description?`<div class="d">${esc(c.description)}</div>`:""}
+    <div class="m" style="margin-top:6px"><span>${esc(dayLabel(c.day))}, ${c.time}</span>${c.duration?`<span>${fmtDur(c.duration)}</span>`:""}${statusPill(c)}</div>
+    <div class="acts"><button class="btn" id="aRe">Reprocess</button><button class="btn" id="aDe">${c.described?"Regenerate description":"Generate description"}</button><button class="btn" id="aFi">Show in Finder</button><button class="btn danger" id="aDel">Delete</button></div>
+    ${c.has_audio?`<div class="player"><audio id="aud" controls preload="metadata" src="/audio?call=${encodeURIComponent(c.id)}"></audio></div>`:'<div class="m" style="margin-top:10px">Audio was deleted by the retention policy.</div>'}
+  </div>
+  ${ready?`<div class="tabs">${["summary","transcript","speakers"].map(t=>`<button class="tab ${S.tab===t?"on":""}" data-t="${t}">${t[0].toUpperCase()+t.slice(1)}${t==="speakers"&&c.pending?` <span class="badge">${c.pending}</span>`:""}</button>`).join("")}</div><div class="body" id="body"></div>`:`<div class="body"><div class="empty">${c.status==="processing"?"Processing… this page updates automatically.":c.status==="failed"?"Processing failed several times. Check processing.log, then try Reprocess.":"This call has not been processed yet. Use Reprocess."}</div></div>`}`;
+  $("#ttl").onclick=async()=>{const v=await modal({title:"Rename call",input:c.title||"",ok:"Save"});if(v&&v.trim())run(async()=>{await api("/api/calls/update",{id:c.id,title:v});await loadCalls();renderItems();openCall(c.id)})};
+  $("#aRe").onclick=async()=>{if(!await modal({title:"Reprocess this call?",text:"The transcript is rebuilt from the audio.",ok:"Reprocess"}))return;run(async()=>{await api("/api/calls/reprocess",{ids:[c.id]});toast("Reprocessing started");tick()})};
+  $("#aDe").onclick=()=>run(async()=>{await api("/api/calls/describe",{ids:[c.id]});toast("Generating description");tick()});
+  $("#aFi").onclick=()=>run(()=>api("/api/calls/reveal",{id:c.id}));
+  $("#aDel").onclick=async()=>{if(!await modal({title:"Delete this call?",text:"It is moved to the Trash.",ok:"Move to Trash",danger:true}))return;run(async()=>{await api("/api/calls/delete",{ids:[c.id]});S.sel=null;S.detail=null;await loadCalls();renderCalls()})};
+  player=$("#aud");
+  const tabs=$(".tabs");if(tabs)tabs.onclick=e=>{const t=e.target.closest(".tab")?.dataset.t;if(t){S.tab=t;renderDetail()}};
+  if(ready)renderBody();
+}
+function renderBody(){
+  const c=S.detail,b=$("#body");if(!b)return;
+  if(S.tab==="summary"){b.innerHTML=c.summary?`<div class="md">${md(c.summary)}</div>`:'<div class="empty">No summary for this call.</div>';return}
+  if(S.tab==="transcript"){
+    if(!c.utterances.length){b.innerHTML='<div class="empty">No speech detected.</div>';return}
+    b.innerHTML=c.utterances.map((u,i)=>`<div class="u ${u.me?"me":""}" data-i="${i}" data-s="${u.start}"><span class="ts">${fmtT(u.start)}</span><span class="w">${esc(u.who)}</span><span>${esc(u.text)}</span></div>`).join("");
+    b.onclick=e=>{const u=e.target.closest(".u");if(u&&player){player.currentTime=+u.dataset.s;player.play()}};
+    if(player)player.ontimeupdate=()=>{const t=player.currentTime;let cur=-1;c.utterances.forEach((u,i)=>{if(u.start<=t)cur=i});
+      b.querySelectorAll(".u").forEach((el,i)=>el.classList.toggle("now",i===cur))};return}
+  const known=S.people;
+  b.innerHTML=(c.clusters.length?"":'<div class="empty">No other speakers were detected in this call.</div>')+c.clusters.map(k=>`
+    <div class="card" data-k="${k.id}"><h4><span>${esc(k.label)} <span class="pill">${fmtDur(k.duration)||"<1 min"}</span></span>
+      <span class="pill ${k.status==="unknown"||k.status==="suggested"?"red":""}">${{matched:"Recognised",assigned:"Assigned",ignored:"Ignored",minor:"Minor",unknown:"Unknown",suggested:"Suggested"}[k.status]||k.status}</span></h4>
+      ${k.clips.map(cl=>`<div class="clip"><audio controls preload="none" src="/clip?call=${encodeURIComponent(c.id)}&file=${encodeURIComponent(cl.file)}"></audio><span>${esc(cl.text)}</span></div>`).join("")}
+      <div class="rowf">${k.suggestions.map(s=>`<button class="btn" data-a="pick" data-p="${s.person_id}">${esc(s.name)} · ${Math.round(s.score*100)}%</button>`).join("")}
+      <select class="sel" data-a="sel"><option value="">Assign to…</option>${known.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select>
+      <button class="btn" data-a="new">New person…</button>
+      ${k.person_id?'<button class="btn" data-a="un">Unassign</button>':'<button class="btn" data-a="ign">Ignore</button>'}</div></div>`).join("");
+  b.onchange=e=>{const k=e.target.closest(".card")?.dataset.k;if(e.target.dataset.a==="sel"&&e.target.value)assign({cluster:+k,person_id:e.target.value})};
+  b.onclick=async e=>{const card=e.target.closest(".card");if(!card)return;const k=+card.dataset.k,a=e.target.dataset.a;
+    if(a==="pick")assign({cluster:k,person_id:e.target.dataset.p});
+    else if(a==="new"){const n=await modal({title:"New person",text:"Name of this speaker",input:"",ok:"Save"});if(n&&n.trim())assign({cluster:k,name:n})}
+    else if(a==="un")assign({cluster:k,unassign:true});
+    else if(a==="ign")assign({cluster:k,ignore:true})};
+}
+async function assign(p){await run(async()=>{await api("/api/assign",{call:S.detail.id,...p});S.people=(await api("/api/people")).people;await loadCalls();renderItems();await openCall(S.detail.id)})}
+
+/* ---------- review ---------- */
+async function renderReview(){
+  S.review=await run(()=>api("/api/review"))||{items:[],people:[]};const r=S.review;
+  $("#main").innerHTML=`<div class="rev"><h2>Review</h2>${r.items.length?"":'<div class="empty">Nothing to review. 🎉</div>'}${r.items.map(it=>`
+   <div class="card" data-call="${esc(it.call)}" data-k="${it.cluster}"><h4><span>Speaker ${it.n} <span class="pill">${fmtDur(it.duration)||"<1 min"}</span></span><a href="#" data-a="open" style="color:var(--accent);text-decoration:none;font-weight:400">${esc(it.title||it.call)}</a></h4>
+   ${it.clips.map(cl=>`<div class="clip"><audio controls preload="none" src="/clip?call=${encodeURIComponent(it.call)}&file=${encodeURIComponent(cl.file)}"></audio><span>${esc(cl.text)}</span></div>`).join("")}
+   <div class="rowf">${it.suggestions.map(s=>`<button class="btn" data-a="pick" data-p="${s.person_id}">${esc(s.name)} · ${Math.round(s.score*100)}%</button>`).join("")}
+   <select class="sel" data-a="sel"><option value="">Assign to…</option>${r.people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select>
+   <button class="btn" data-a="new">New person…</button><button class="btn" data-a="ign">Ignore</button></div></div>`).join("")}</div>`;
+  const root=$(".rev");
+  const act=async(card,p)=>{await run(async()=>{await api("/api/assign",{call:card.dataset.call,cluster:+card.dataset.k,...p});await loadCalls();renderReview()})};
+  root.onchange=e=>{const c=e.target.closest(".card");if(c&&e.target.dataset.a==="sel"&&e.target.value)act(c,{person_id:e.target.value})};
+  root.onclick=async e=>{const c=e.target.closest(".card");if(!c)return;const a=e.target.dataset.a;
+    if(a==="open"){e.preventDefault();S.sel=c.dataset.call;go("calls");return}
+    if(a==="pick")act(c,{person_id:e.target.dataset.p});
+    else if(a==="ign")act(c,{ignore:true});
+    else if(a==="new"){const n=await modal({title:"New person",text:"Name of this speaker",input:"",ok:"Save"});if(n&&n.trim())act(c,{name:n})}};
+}
+
+/* ---------- people ---------- */
+async function renderPeople(){
+  S.people=(await run(()=>api("/api/people")))?.people||[];
+  $("#main").innerHTML=`<div class="people"><h2>People</h2>${S.people.length?"":'<div class="empty">No people yet. Assign speakers in a call and they appear here.</div>'}${S.people.map(p=>`
+   <div class="card" data-id="${p.id}"><h4><span>${esc(p.name)} <span class="pill">${p.calls} call${p.calls===1?"":"s"}</span></span>
+   <span class="rowf" style="margin:0"><button class="btn" data-a="ren">Rename</button><button class="btn" data-a="mer">Merge into…</button><button class="btn danger" data-a="del">Delete</button></span></h4>
+   ${p.prints.map(v=>`<div class="print"><span>Voiceprint ${v.id}</span><span style="flex:1">${esc(v.device||"no device label")}${v.created_at?" · "+esc(String(v.created_at).slice(0,10)):""}</span><button class="btn" data-a="lbl" data-v="${v.id}" data-d="${esc(v.device)}">Label</button><button class="btn danger" data-a="dp" data-v="${v.id}">Remove</button></div>`).join("")}</div>`).join("")}</div>`;
+  $(".people").onclick=async e=>{const card=e.target.closest(".card"),a=e.target.dataset.a;if(!card||!a)return;
+    const id=+card.dataset.id,p=S.people.find(x=>x.id===id),post=b=>run(async()=>{await api("/api/people",b);await loadCalls();renderPeople()});
+    if(a==="ren"){const n=await modal({title:"Rename",input:p.name,ok:"Save"});if(n&&n.trim())post({action:"rename",id,name:n})}
+    else if(a==="del"){if(await modal({title:`Delete ${p.name}?`,text:"Their voiceprints are removed. Calls keep the transcript but the speaker becomes unidentified.",ok:"Delete",danger:true}))post({action:"delete",id})}
+    else if(a==="mer"){const others=S.people.filter(x=>x.id!==id);if(!others.length){toast("No one to merge into");return}
+      const v=await modal({title:`Merge ${p.name} into…`,text:"Voiceprints and calls move to the person you pick. "+p.name+" is removed.",options:others.map(o=>({v:o.id,l:o.name})),ok:"Merge"});
+      if(v)post({action:"merge",id,into:+v})}
+    else if(a==="dp"){if(await modal({title:"Remove voiceprint?",text:"Recognition of this person on that microphone may get worse.",ok:"Remove",danger:true}))post({action:"delete_print",id:+e.target.dataset.v})}
+    else if(a==="lbl"){const n=await modal({title:"Device label",text:"e.g. MacBook mic, AirPods",input:e.target.dataset.d,ok:"Save"});if(n!==null)post({action:"update_print",id:+e.target.dataset.v,device:n})}};
+}
+
+/* ---------- shell ---------- */
+async function go(v){S.view=v;document.querySelectorAll(".nav[data-v]").forEach(n=>n.classList.toggle("on",n.dataset.v===v));
+  await run(loadCalls);
+  if(v==="calls"){S.people=(await run(()=>api("/api/people")))?.people||[];renderCalls();if(S.sel)openCall(S.sel)}
+  else if(v==="review")renderReview();else renderPeople()}
+document.querySelectorAll(".nav[data-v]").forEach(n=>n.onclick=()=>go(n.dataset.v));
+$("#openFolder").onclick=()=>run(()=>api("/api/open-folder",{}));
+async function tick(){
+  const was=S.status.processing,prev=JSON.stringify(S.calls.map(c=>[c.id,c.status,c.title,c.pending]));
+  await run(loadCalls);
+  if(S.view==="calls"&&!$("#q")?.matches(":focus")){
+    if(JSON.stringify(S.calls.map(c=>[c.id,c.status,c.title,c.pending]))!==prev){renderItems();renderTools();
+      if(S.sel&&S.detail&&!(player&&!player.paused)){const cur=S.calls.find(c=>c.id===S.sel);if(cur&&(cur.status!==S.detail.status||cur.title!==S.detail.title))openCall(S.sel)}}}
+}
+setInterval(tick,(document.hidden?8000:3000));
+document.addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="f"&&S.view==="calls"){e.preventDefault();$("#q")?.focus()}});
+go("calls");
+</script>
+</body>
+</html>

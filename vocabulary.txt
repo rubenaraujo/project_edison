@@ -1,0 +1,2 @@
+# Names, companies and technical terms, one per line (helps transcription and corrections).
+# Lines starting with # are ignored.
