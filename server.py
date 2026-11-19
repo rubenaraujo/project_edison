@@ -366,6 +366,73 @@ def people_action(b):
     refresh_names()
 
 
+# ------------------------------------------------------------------ settings
+
+VOCAB = os.path.join(common.HERE, "vocabulary.txt")
+MODEL_OPTIONS = {
+    "whisper_model": [
+        ["mlx-community/whisper-large-v3-mlx", "Large v3 — most accurate (recommended)"],
+        ["mlx-community/whisper-large-v3-turbo", "Large v3 turbo — faster, slightly less accurate"],
+        ["mlx-community/whisper-medium-mlx", "Medium — light, for Macs with less memory"],
+    ],
+    "polish_model": [
+        ["mlx-community/Qwen2.5-14B-Instruct-4bit", "Qwen 2.5 14B — balanced (recommended)"],
+        ["mlx-community/Qwen2.5-32B-Instruct-4bit", "Qwen 2.5 32B — best quality, needs 32 GB+"],
+        ["mlx-community/Qwen2.5-7B-Instruct-4bit", "Qwen 2.5 7B — light and fast"],
+    ],
+}
+
+
+def get_settings():
+    try:
+        with open(VOCAB, encoding="utf-8") as f:
+            vocab = f.read()
+    except OSError:
+        vocab = ""
+    return {"config": common.config(), "vocabulary": vocab, "folder": common.BASE, "models": MODEL_OPTIONS}
+
+
+def save_settings(b):
+    c = b.get("config", {})
+    cfg = common.config()
+
+    def boolean(k):
+        if k in c:
+            if not isinstance(c[k], bool):
+                raise Err(f"{k} must be on or off")
+            cfg[k] = c[k]
+
+    def number(k, lo, hi, nullable=False):
+        if k in c:
+            v = c[k]
+            if v is None and nullable:
+                cfg[k] = None
+            elif isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi:
+                cfg[k] = v
+            else:
+                raise Err(f"{k} must be a whole number between {lo} and {hi}")
+
+    boolean("keep_raw_tracks")
+    boolean("notify_when_done")
+    number("audio_retention_days", 0, 3650, nullable=True)
+    number("min_call_seconds", 0, 600)
+    if "exclude_titles" in c:
+        if not isinstance(c["exclude_titles"], list) or not all(isinstance(x, str) for x in c["exclude_titles"]):
+            raise Err("exclude_titles must be a list of text")
+        cfg["exclude_titles"] = [x.strip() for x in c["exclude_titles"] if x.strip()]
+    for k in ("whisper_model", "polish_model"):
+        if k in c:
+            if not isinstance(c[k], str) or not re.match(r"^[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*$", c[k].strip()):
+                raise Err(f"{k} must look like owner/name")
+            cfg[k] = c[k].strip()
+    common.save_config(cfg)
+    if "vocabulary" in b:
+        if not isinstance(b["vocabulary"], str):
+            raise Err("bad vocabulary")
+        with open(VOCAB, "w", encoding="utf-8") as f:
+            f.write(b["vocabulary"].rstrip() + "\n" if b["vocabulary"].strip() else "")
+
+
 # ------------------------------------------------------------------ http
 
 class H(BaseHTTPRequestHandler):
@@ -431,6 +498,8 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"people": people()}))
             if u.path == "/api/review":
                 return self.send(200, json.dumps({"items": review_items(), "people": voices.people()}))
+            if u.path == "/api/settings":
+                return self.send(200, json.dumps(get_settings()))
             if u.path == "/api/status":
                 return self.send(200, json.dumps(global_status()))
             if u.path == "/audio":
@@ -479,6 +548,8 @@ class H(BaseHTTPRequestHandler):
                 subprocess.run(["open", "-R", call_dir(b["id"])], check=False)
             elif p == "/api/people":
                 people_action(b)
+            elif p == "/api/settings":
+                save_settings(b)
             elif p == "/api/open-folder":
                 subprocess.run(["open", common.BASE], check=False)
             else:

@@ -46,6 +46,10 @@ for repo in ("mlx-community/whisper-large-v3-mlx", "mlx-community/Qwen2.5-14B-In
     snapshot_download(repo)
 EOF
 
+say "Signing identity (keeps macOS permissions across updates)"
+chmod +x make_cert.sh
+./make_cert.sh || echo "Could not create a signing identity; the app will be signed ad-hoc."
+
 say "Building the app"
 pkill_old() { pgrep -f "$APP/Contents/MacOS/Edison" 2>/dev/null || true; }
 OLD_AGENT="$HOME/Library/LaunchAgents/local.rubenaraujo.edison.plist"

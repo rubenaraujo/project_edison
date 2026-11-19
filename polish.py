@@ -3,7 +3,9 @@ import difflib
 import os
 import re
 
-MODEL = os.environ.get("POLISH_MODEL", "mlx-community/Qwen2.5-14B-Instruct-4bit")
+import common
+
+MODEL = os.environ.get("POLISH_MODEL") or common.config()["polish_model"]
 BATCH = 20
 
 SYSTEM = (

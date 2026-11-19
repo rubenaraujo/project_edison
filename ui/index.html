@@ -84,6 +84,22 @@ mark{background:#ffe066;color:#000;border-radius:2px}
 .modal .rowf{justify-content:flex-end}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#323236;color:#fff;padding:8px 16px;border-radius:20px;z-index:10;opacity:0;transition:.2s;pointer-events:none}
 #toast.on{opacity:1}
+.set{padding:18px 24px 40px;overflow:auto;flex:1}
+.set>div{max-width:640px}
+.set h2{margin:0 0 4px}
+.set h3{margin:26px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim)}
+.sgrp{border:1px solid var(--line);border-radius:10px}
+.srow{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:0}
+.srow .l{flex:1;min-width:0}.srow .l b{font-weight:600}.srow .l div{color:var(--dim);font-size:12px;margin-top:2px}
+.srow .sel,.srow .field{width:260px}.srow input[type=number]{width:90px}
+.srow textarea,.set>div>textarea{width:100%;min-height:90px;resize:vertical;font:inherit;padding:8px;border-radius:7px;border:1px solid var(--line);background:var(--bg);outline:none}
+.srow.col{flex-direction:column;align-items:stretch;gap:8px}
+.sw{appearance:none;width:38px;height:22px;border-radius:11px;background:var(--line);position:relative;cursor:pointer;flex:none;transition:.15s}
+.sw:checked{background:var(--green)}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.sw:checked::after{left:18px}
+.savebar{position:sticky;bottom:0;padding:12px 0;border-top:1px solid var(--line);margin-top:16px;background:var(--bg);display:flex;gap:8px;align-items:center}
 .rev{padding:18px 24px 24px;overflow:auto;flex:1;max-width:760px}
 </style>
 </head>
@@ -93,6 +109,7 @@ mark{background:#ffe066;color:#000;border-radius:2px}
   <button class="nav on" data-v="calls">Calls</button>
   <button class="nav" data-v="review">Review <span class="badge" id="bRev" hidden></span></button>
   <button class="nav" data-v="people">People</button>
+  <button class="nav" data-v="settings">Settings</button>
   <div id="state"></div>
   <button class="nav" id="openFolder">Open folder</button>
 </div>
@@ -291,11 +308,49 @@ async function renderPeople(){
     else if(a==="lbl"){const n=await modal({title:"Device label",text:"e.g. MacBook mic, AirPods",input:e.target.dataset.d,ok:"Save"});if(n!==null)post({action:"update_print",id:+e.target.dataset.v,device:n})}};
 }
 
+/* ---------- settings ---------- */
+async function renderSettings(){
+  const j=await run(()=>api("/api/settings"));if(!j)return;const c=j.config;
+  const row=(label,help,ctl)=>`<div class="srow"><div class="l"><b>${label}</b><div>${help}</div></div>${ctl}</div>`;
+  const sw=(k)=>`<input type="checkbox" class="sw" data-k="${k}" ${c[k]?"checked":""}>`;
+  const sel=(k)=>{const opts=j.models[k].slice();if(!opts.some(o=>o[0]===c[k]))opts.push([c[k],c[k]+" (custom)"]);
+    return `<select class="sel" data-k="${k}">${opts.map(o=>`<option value="${esc(o[0])}" ${o[0]===c[k]?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`};
+  $("#main").innerHTML=`<div class="set"><div><h2>Settings</h2>
+  <h3>Recording</h3><div class="sgrp">
+   ${row("Ignore very short calls","Recordings shorter than this are discarded (seconds). 0 keeps everything.",`<input class="field" type="number" min="0" max="600" data-k="min_call_seconds" value="${c.min_call_seconds}">`)}
+   <div class="srow col"><div class="l"><b>Never record meetings whose title contains…</b><div>One word or phrase per line, case-insensitive. Checked against all Teams window titles during a call; a match stops and discards the recording. For one-off cases use “Don't record this call” in the menu bar icon.</div></div>
+   <textarea data-k="exclude_titles" placeholder="e.g. HR&#10;Performance review">${esc((c.exclude_titles||[]).join("\n"))}</textarea></div>
+  </div>
+  <h3>Notifications</h3><div class="sgrp">${row("Notify when a call is processed","Clicking the notification opens the call. Hidden while Edison is the front window.",sw("notify_when_done"))}</div>
+  <h3>Transcription &amp; language models</h3><div class="sgrp">
+   ${row("Transcription","Whisper model. A new model downloads on its first use (several GB).",sel("whisper_model"))}
+   ${row("Corrections &amp; summaries","Local LLM. Applies to calls processed from now on.",sel("polish_model"))}
+  </div>
+  <h3>Storage</h3><div class="sgrp">
+   ${row("Delete audio after (days)","Transcripts, summaries and voiceprints are kept. 0 keeps audio forever.",`<input class="field" type="number" min="0" max="3650" data-k="audio_retention_days" value="${c.audio_retention_days??0}">`)}
+   ${row("Keep each speaker’s original tracks","Lets you reprocess with “me” and “others” separated, at the cost of disk space.",sw("keep_raw_tracks"))}
+   ${row("Recordings folder",esc(j.folder),`<button class="btn" id="oF">Open</button>`)}
+  </div>
+  <h3>Vocabulary</h3><div class="sgrp"><div class="srow col"><div class="l"><b>Names and terms</b><div>One per line. Helps with people, products and jargon. Lines starting with # are ignored.</div></div>
+   <textarea data-v="vocabulary" style="min-height:130px">${esc(j.vocabulary)}</textarea></div></div>
+  <div class="savebar"><button class="btn pri" id="sv">Save</button><span id="sm" style="color:var(--dim)"></span></div></div></div>`;
+  const root=$(".set");$("#oF").onclick=()=>run(()=>api("/api/open-folder",{}));
+  root.oninput=root.onchange=()=>{$("#sm").textContent="Unsaved changes"};
+  $("#sv").onclick=()=>run(async()=>{
+    const cfg={};root.querySelectorAll("[data-k]").forEach(el=>{const k=el.dataset.k;
+      if(el.type==="checkbox")cfg[k]=el.checked;
+      else if(el.type==="number")cfg[k]=el.value===""||(k==="audio_retention_days"&&+el.value===0)?(k==="audio_retention_days"?null:0):+el.value;
+      else if(k==="exclude_titles")cfg[k]=el.value.split("\n").map(x=>x.trim()).filter(Boolean);
+      else cfg[k]=el.value});
+    await api("/api/settings",{config:cfg,vocabulary:root.querySelector("[data-v=vocabulary]").value});
+    $("#sm").textContent="Saved";toast("Settings saved")})
+}
+
 /* ---------- shell ---------- */
 async function go(v){S.view=v;document.querySelectorAll(".nav[data-v]").forEach(n=>n.classList.toggle("on",n.dataset.v===v));
   await run(loadCalls);
   if(v==="calls"){S.people=(await run(()=>api("/api/people")))?.people||[];renderCalls();if(S.sel)openCall(S.sel)}
-  else if(v==="review")renderReview();else renderPeople()}
+  else if(v==="review")renderReview();else if(v==="settings")renderSettings();else renderPeople()}
 document.querySelectorAll(".nav[data-v]").forEach(n=>n.onclick=()=>go(n.dataset.v));
 $("#openFolder").onclick=()=>run(()=>api("/api/open-folder",{}));
 async function tick(){
@@ -307,7 +362,10 @@ async function tick(){
 }
 setInterval(tick,(document.hidden?8000:3000));
 document.addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="f"&&S.view==="calls"){e.preventDefault();$("#q")?.focus()}});
-go("calls");
+function fromHash(){const m=location.hash.match(/^#call=(.+)$/);if(!m)return false;
+  S.sel=decodeURIComponent(m[1]);S.q="";S.filter="all";S.tab="summary";history.replaceState(null,"",location.pathname);return true}
+window.addEventListener("hashchange",()=>{if(fromHash())go("calls")});
+fromHash();go("calls");
 </script>
 </body>
 </html>

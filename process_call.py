@@ -14,7 +14,7 @@ import common
 import voices
 
 HERE = common.HERE
-WHISPER = os.environ.get("WHISPER_MODEL", "mlx-community/whisper-large-v3-mlx")
+WHISPER = os.environ.get("WHISPER_MODEL") or common.config()["whisper_model"]
 SEG_MODEL = os.path.join(HERE, "models", "sherpa-onnx-pyannote-segmentation-3-0", "model.onnx")
 EMB_MODEL = os.path.join(HERE, "models", "wespeaker_en_voxceleb_resnet293_LM.onnx")
 VOCAB = os.path.join(HERE, "vocabulary.txt")
@@ -282,10 +282,6 @@ def main(folder, tmp):
         common.save(folder, data)
     pending = sum(c["status"] in common.PENDING for c in clusters)
     log(f"saved transcript ({len(utts)} utterances, {len(clusters)} speakers, {pending} to review)")
-    if pending:
-        subprocess.run(["osascript", "-e",
-                        f'display notification "{pending} speaker(s) to identify — open Edison" '
-                        f'with title "Edison"'], check=False)
 
 
 if __name__ == "__main__":

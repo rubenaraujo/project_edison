@@ -3,6 +3,7 @@ import AVFoundation
 import CoreAudio
 import ScreenCaptureKit
 import ServiceManagement
+import UserNotifications
 import WebKit
 
 // MARK: - Paths
@@ -29,16 +30,49 @@ func log(_ s: String) {
 
 var lastNotified: [String: Date] = [:]
 
-func notify(_ title: String, _ message: String, key: String? = nil, every: TimeInterval = 1800) {
+var notificationsAllowed = false
+
+func notify(_ title: String, _ message: String, key: String? = nil, every: TimeInterval = 1800, call: String? = nil) {
     if let key {
         if let t = lastNotified[key], Date().timeIntervalSince(t) < every { return }
         lastNotified[key] = Date()
+    }
+    if notificationsAllowed {
+        let c = UNMutableNotificationContent()
+        c.title = title; c.body = message
+        if let call { c.userInfo = ["call": call] }
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+        return
     }
     let esc = { (t: String) in t.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "'") }
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
     p.arguments = ["-e", "display notification \"\(esc(message))\" with title \"\(esc(title))\""]
     try? p.run()
+}
+
+/// config.json is shared with the Python side and the Settings tab; re-read on every use.
+func appConfig() -> [String: Any] {
+    guard let d = try? Data(contentsOf: URL(fileURLWithPath: projectRoot + "/config.json")),
+          let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
+    return j
+}
+
+/// Titles of Microsoft Teams windows (needs the Screen Recording permission Edison already has).
+func teamsWindowTitles() -> [String] {
+    guard let list = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+    else { return [] }
+    return list.compactMap { w in
+        guard let owner = w[kCGWindowOwnerName as String] as? String, owner.localizedCaseInsensitiveContains("teams"),
+              let name = w[kCGWindowName as String] as? String, !name.isEmpty else { return nil }
+        return name
+    }
+}
+
+func titleIsExcluded() -> Bool {
+    let words = ((appConfig()["exclude_titles"] as? [String]) ?? []).map { $0.lowercased() }.filter { !$0.isEmpty }
+    guard !words.isEmpty else { return false }
+    return teamsWindowTitles().contains { t in words.contains { t.lowercased().contains($0) } }
 }
 
 func freeDiskGB() -> Double {
@@ -165,6 +199,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
     private var system: TrackWriter?
     private var mic: TrackWriter?
     private(set) var folder: URL?
+    private var startedAt = Date()
     var isRecording: Bool { stream != nil }
 
     @discardableResult
@@ -210,6 +245,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
             try s.addStreamOutput(self, type: .microphone, sampleHandlerQueue: q)
             try await s.startCapture()
             stream = s
+            startedAt = Date()
             log("recording started -> \(dir.path)")
             return true
         } catch {
@@ -222,7 +258,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
         }
     }
 
-    func stop() async {
+    func stop(discard: Bool = false) async {
         guard let s = stream else { return }
         stream = nil
         try? await s.stopCapture()
@@ -230,7 +266,18 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
         log("recording stopped")
         if let dir = folder {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(".recording"))
-            Postprocess.run(folder: dir)
+            let minSeconds = (appConfig()["min_call_seconds"] as? Int) ?? 15
+            let seconds = Date().timeIntervalSince(startedAt)
+            if discard || seconds < Double(minSeconds) {
+                log(discard ? "recording discarded (skipped by user or excluded title)" : "recording discarded (\(Int(seconds)) s, shorter than \(minSeconds) s)")
+                try? FileManager.default.removeItem(at: dir)
+                let day = dir.deletingLastPathComponent()
+                if ((try? FileManager.default.contentsOfDirectory(atPath: day.path)) ?? ["x"]).filter({ $0 != ".DS_Store" }).isEmpty {
+                    try? FileManager.default.removeItem(at: day)
+                }
+            } else {
+                Postprocess.run(folder: dir)
+            }
         }
         system = nil; mic = nil; folder = nil
     }
@@ -326,12 +373,14 @@ enum Postprocess {
 
 // MARK: - App
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
     let recorder = Recorder()
     var item: NSStatusItem!
     var statusLine: NSMenuItem!
     var openItem: NSMenuItem!
     var loginItem: NSMenuItem!
+    var skipItem: NSMenuItem!
+    var skipUntilIdle = false
     var timer: Timer?
     var lastActive = Date.distantPast
     var busy = false
@@ -351,6 +400,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         openItem = menu.addItem(withTitle: "Open Edison…", action: #selector(openWindow), keyEquivalent: "e")
         openItem.target = self
         menu.addItem(withTitle: "Open recordings folder", action: #selector(openFolder), keyEquivalent: "o").target = self
+        skipItem = menu.addItem(withTitle: "Don't record this call", action: #selector(skipCall), keyEquivalent: "")
+        skipItem.target = self
         loginItem = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         loginItem.target = self
         let pause = menu.addItem(withTitle: "Pause auto-detection", action: #selector(togglePause(_:)), keyEquivalent: "p")
@@ -367,6 +418,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             try? SMAppService.mainApp.register()
         }
 
+        UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { ok, _ in
+            DispatchQueue.main.async { notificationsAllowed = ok }
+        }
         // Trigger permission prompts early.
         AVCaptureDevice.requestAccess(for: .audio) { _ in }
         CGRequestScreenCaptureAccess()
@@ -379,19 +434,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func tick() {
+        checkDoneNotifications()
         guard !busy, !paused else { return }
         let active = CallDetector.teamsIsUsingMic()
         if active { lastActive = Date() }
-        if active && !recorder.isRecording && Date() >= retryAfter {
+        if !active && Date().timeIntervalSince(lastActive) > 6 { skipUntilIdle = false }
+        if active && !recorder.isRecording && !skipUntilIdle && Date() >= retryAfter {
+            if titleIsExcluded() { skipUntilIdle = true; log("not recording: excluded meeting title"); return }
             busy = true
             Task {
                 if !(await recorder.start()) { retryAfter = Date().addingTimeInterval(60) }
                 busy = false; render()
             }
+        } else if recorder.isRecording && active && titleIsExcluded() {
+            skipUntilIdle = true
+            busy = true
+            Task { await recorder.stop(discard: true); busy = false; render() }
         } else if !active && recorder.isRecording && Date().timeIntervalSince(lastActive) > 6 {
             busy = true
             Task { await recorder.stop(); busy = false; render() }
         }
+    }
+
+    @objc func skipCall() {
+        skipUntilIdle = true
+        log("call skipped by user")
+        if recorder.isRecording {
+            busy = true
+            Task { await recorder.stop(discard: true); busy = false; render() }
+        }
+        render()
+    }
+
+    /// transcribe.sh drops a marker in .notify/ when a call has been processed.
+    func checkDoneNotifications() {
+        let fm = FileManager.default
+        let dir = baseFolder.appendingPathComponent(".notify")
+        guard let files = try? fm.contentsOfDirectory(atPath: dir.path), !files.isEmpty else { return }
+        let enabled = (appConfig()["notify_when_done"] as? Bool) ?? true
+        for f in files {
+            let u = dir.appendingPathComponent(f)
+            defer { try? fm.removeItem(at: u) }
+            guard enabled, let id = try? String(contentsOf: u, encoding: .utf8),
+                  !(window?.isVisible == true && NSApp.isActive),
+                  let d = try? Data(contentsOf: baseFolder.appendingPathComponent(id).appendingPathComponent("transcript.json")),
+                  let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { continue }
+            let title = (j["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Call processed"
+            let pending = ((j["clusters"] as? [[String: Any]]) ?? [])
+                .filter { ["unknown", "suggested"].contains($0["status"] as? String ?? "") }.count
+            let desc = (j["description"] as? String) ?? ""
+            let body = pending > 0 ? "\(pending) speaker\(pending == 1 ? "" : "s") to identify" : desc
+            notify("Edison · " + title, body, call: id)
+        }
+    }
+
+    func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification,
+                                withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
+        done([.banner])
+    }
+
+    func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse,
+                                withCompletionHandler done: @escaping () -> Void) {
+        let id = r.notification.request.content.userInfo["call"] as? String
+        DispatchQueue.main.async { self.show(call: id) }
+        done()
     }
 
     func glyph(recording: Bool) -> NSImage {
@@ -431,6 +537,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        let inCall = recorder.isRecording || (CallDetector.teamsIsUsingMic() && !skipUntilIdle)
+        skipItem.isEnabled = inCall
+        skipItem.title = skipUntilIdle ? "Not recording this call" : "Don't record this call"
+        skipItem.state = skipUntilIdle ? .on : .off
+        if skipUntilIdle { skipItem.isEnabled = false }
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         let n = pendingSpeakers() + CallStore.calls().filter { CallStore.needsProcessing($0) }.count
         openItem.title = n > 0 ? "Open Edison (\(n) need attention)…" : "Open Edison…"
@@ -482,7 +593,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         do { try p.run(); server = p; log("manager server started") } catch { log("server failed: \(error)") }
     }
 
-    @objc func openWindow() {
+    @objc func openWindow() { show(call: nil) }
+
+    func show(call: String?) {
         ensureServer()
         if window == nil {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
@@ -504,17 +617,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        loadUI(attempt: 0)
+        if let call, let web, web.url?.host == "127.0.0.1" {
+            let enc = call.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? call
+            web.evaluateJavaScript("location.hash = 'call=\(enc)'")
+        } else if web?.url?.host != "127.0.0.1" {
+            loadUI(attempt: 0, call: call)
+        }
     }
 
-    func loadUI(attempt: Int) {
-        guard let web, let url = URL(string: "http://127.0.0.1:8765/") else { return }
+    func loadUI(attempt: Int, call: String? = nil) {
+        let frag = call.map { "#call=" + ($0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? $0) } ?? ""
+        guard let web, let url = URL(string: "http://127.0.0.1:8765/" + frag) else { return }
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 2)
         req.httpMethod = "HEAD"
         URLSession.shared.dataTask(with: req) { [weak self] _, resp, _ in
             DispatchQueue.main.async {
                 if (resp as? HTTPURLResponse)?.statusCode == 200 { web.load(URLRequest(url: url)) }
-                else if attempt < 40 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self?.loadUI(attempt: attempt + 1) } }
+                else if attempt < 40 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self?.loadUI(attempt: attempt + 1, call: call) } }
                 else { web.loadHTMLString("<body style='font:15px -apple-system;padding:40px'>Could not start the Edison manager. See recorder.log.</body>", baseURL: nil) }
             }
         }.resume()

@@ -17,7 +17,7 @@ A silent macOS menu-bar app that records your Microsoft Teams calls (your microp
 ./install.sh
 ```
 
-It creates the Python environment, downloads the models (Whisper large-v3, Qwen2.5-14B, speaker models), builds `~/Applications/Edison.app`, and starts it. Safe to re-run (also use it to update after changing the code).
+It creates the Python environment, downloads the models (Whisper large-v3, Qwen2.5-14B, speaker models), creates a local signing identity (`make_cert.sh`), builds `~/Applications/Edison.app`, and starts it. Safe to re-run (also use it to update after changing the code).
 
 On first run macOS asks for **Microphone** and **Screen & System Audio Recording** access. Both are required: the second is how the other participants' audio is captured.
 
@@ -31,6 +31,7 @@ Edison detects when Teams starts using the microphone and records automatically.
 | --- | --- |
 | Open Edison… | Opens the manager window |
 | Open recordings folder | Opens `~/Teams Recordings` |
+| Don't record this call | Skips the call in progress (discards what was recorded) and stays off until Teams stops using the microphone |
 | Launch at login | Starts Edison silently when the Mac starts (on by default; untick to disable) |
 | Pause auto-detection | Stops recording new calls |
 
@@ -41,6 +42,18 @@ The icon turns red while recording.
 - **Calls**: search, filter, play audio, read summary/transcript (click a line to jump to it), rename, reprocess, delete (moves to Trash). Each call gets an LLM-written title and one-line description.
 - **Review**: unidentified speakers; listen to a clip and assign a name. Voices are remembered locally, several voiceprints per person are supported.
 - **People**: rename, merge, delete people and voiceprints.
+
+- **Settings**: everything in `config.json` plus the vocabulary, without touching files: minimum call length, meeting-title exclusions, notifications, Whisper and LLM models, audio retention.
+
+### Notifications
+
+When a call has been processed Edison shows a notification (title, one-line description, or how many speakers need identifying). Clicking it opens that call. It is skipped while the Edison window is in front. Turn it off in Settings.
+
+### What is not recorded
+
+- Calls shorter than `min_call_seconds` (default 15 s), e.g. a microphone test in Teams.
+- Meetings with a Teams window title containing any word in `exclude_titles`.
+- A call you skip with *Don't record this call*.
 
 ## Output
 
@@ -55,15 +68,17 @@ The icon turns red while recording.
 
 ## Configuration
 
-- `config.json`: `audio_retention_days` (default 30), `keep_raw_tracks` (default false).
+Edit these in the **Settings** tab, or directly:
+
+- `config.json`: `audio_retention_days` (30; null keeps forever), `keep_raw_tracks` (false), `notify_when_done` (true), `min_call_seconds` (15), `exclude_titles` ([]), `whisper_model`, `polish_model`.
 - `vocabulary.txt`: names and terms (one per line) to help transcription.
 - Logs: `~/Teams Recordings/recorder.log` and `processing.log`.
 
 ## Layout
 
-`Sources/main.swift` (app) · `transcribe.sh` (queue) · `process_call.py` (pipeline) · `server.py` + `ui/` (manager window) · `voices.py` (voice database) · `polish.py`, `summary.py` (local LLM)
+`Sources/main.swift` (app) · `make_cert.sh` (signing identity) · `transcribe.sh` (queue) · `process_call.py` (pipeline) · `server.py` + `ui/` (manager window) · `voices.py` (voice database) · `polish.py`, `summary.py` (local LLM)
 
 ## Troubleshooting
 
-- **No recording / permission error:** System Settings → Privacy & Security → enable Edison under Microphone and Screen & System Audio Recording. After a rebuild the signature changes and macOS may ask again.
+- **No recording / permission error:** System Settings → Privacy & Security → enable Edison under Microphone and Screen & System Audio Recording. Builds are signed with a local self-signed identity ("Edison Local Signing", created by `make_cert.sh`), so permissions survive updates. If that identity is missing the app is signed ad-hoc and macOS asks again after each rebuild.
 - **Call not processed:** open Edison; unprocessed calls show a banner in the sidebar. Click *Process unprocessed*.

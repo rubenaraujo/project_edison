@@ -6,6 +6,33 @@ import re
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.environ.get("TEAMS_REC_FOLDER") or os.path.expanduser("~/Teams Recordings")
 PENDING = ("unknown", "suggested")
+CONFIG_PATH = os.path.join(HERE, "config.json")
+DEFAULTS = {
+    "audio_retention_days": 30,
+    "keep_raw_tracks": False,
+    "notify_when_done": True,
+    "min_call_seconds": 15,
+    "exclude_titles": [],
+    "whisper_model": "mlx-community/whisper-large-v3-mlx",
+    "polish_model": "mlx-community/Qwen2.5-14B-Instruct-4bit",
+}
+
+
+def config():
+    cfg = dict(DEFAULTS)
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            cfg.update(json.load(f))
+    except Exception:
+        pass
+    return cfg
+
+
+def save_config(cfg):
+    with open(CONFIG_PATH + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(CONFIG_PATH + ".tmp", CONFIG_PATH)
 
 
 def calls():

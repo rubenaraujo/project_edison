@@ -48,7 +48,7 @@ fail() {
   exit 1
 }
 
-KEEP_TRACKS="$("$PY" -c "import json;print(json.load(open('$HERE/config.json')).get('keep_raw_tracks', False))" 2>/dev/null || echo False)"
+KEEP_TRACKS="$(cd "$HERE" && "$PY" -c "import common;print(common.config()['keep_raw_tracks'])" 2>/dev/null || echo False)"
 
 TRACKS=()
 for t in me others; do
@@ -85,4 +85,6 @@ if [ "$FROM_MIX" = 0 ] && [ "$KEEP_TRACKS" != "True" ] && [ -s "$DIR/call.m4a" ]
   rm -f "$DIR"/me.caf "$DIR"/others.caf "$DIR"/me.m4a "$DIR"/others.m4a
 fi
 rm -f "$DIR/.attempts"
+# the app picks these up and shows a "call processed" notification
+mkdir -p "$LOGDIR/.notify" && printf '%s' "$(basename "$(dirname "$DIR")")/$(basename "$DIR")" >"$LOGDIR/.notify/$$"
 echo "done"

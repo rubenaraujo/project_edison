@@ -10,15 +10,8 @@ import time
 
 import common
 
-CONFIG = os.path.join(common.HERE, "config.json")
-
-
 def retention_days():
-    try:
-        with open(CONFIG) as f:
-            return json.load(f).get("audio_retention_days")
-    except Exception:
-        return 30
+    return common.config()["audio_retention_days"]
 
 
 def main():
