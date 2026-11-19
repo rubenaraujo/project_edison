@@ -467,6 +467,8 @@ class H(BaseHTTPRequestHandler):
             else:
                 start = max(size - int(m.group(2)), 0)
             end = min(end, size - 1)
+            if start > end:
+                return self.send(416, "bad range", "text/plain", {"Content-Range": f"bytes */{size}"})
             code = 206
         with open(path, "rb") as f:
             f.seek(start)
