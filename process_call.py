@@ -107,7 +107,6 @@ def _rx(pattern, rep):
 # Heard wrongly in any language
 FIXES = [
     _rx(r"yield attack|yodatact|data acton|dtac|datar|dataque|detacto|dat[ae]ct", "Data Act"),
-    _rx(r"fpc", "VPC"),
     _rx(r"computador pc", "VPC"),
     _rx(r"alamir", "Miriam"),
     _rx(r"cris", "Chris"),
