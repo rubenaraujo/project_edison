@@ -88,6 +88,9 @@ HALLUCINATIONS = {"okay", "ok", "thank you", "thanks", "thanks for watching", "t
                   "youre welcome", "all rights reserved", "legendas pela comunidade amara.org"}
 
 
+LOOP = re.compile(r"(.{3,60}?)(?:\s*\1){3,}", re.I | re.S)
+
+
 def junk_segment(seg):
     """True for segments Whisper made up from noise, overlapping voices or silence."""
     text = seg["text"].strip()
@@ -96,6 +99,8 @@ def junk_segment(seg):
     mp = sum(w.get("probability", 1) for w in ws) / len(ws) if ws else 1
     plain = re.sub(r"[^\w ]+", "", text.lower()).strip()
     if lp < -1.0 or (lp < -0.9 and mp < 0.3):
+        return True
+    if LOOP.search(text):  # stuck repeating the same phrase
         return True
     if re.search(r"[^\u0000-\u024F\u2000-\u206F€£]", text) or re.search(r"(.)\1{3,}", text):
         return True  # other scripts, symbols, stuck characters
