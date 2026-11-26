@@ -83,8 +83,25 @@ PROMPTS = {
     "en": "Work meeting in English. ",
 }
 # Short fillers Whisper invents on silence/noise
-HALLUCINATIONS = {"okay", "ok", "thank you", "thanks", "thanks for watching", "obrigado", "obrigada", "you",
-                  "bye", "legendas pela comunidade amara.org"}
+HALLUCINATIONS = {"okay", "ok", "thank you", "thanks", "thanks for watching", "thank you for watching",
+                  "thanks man", "obrigado", "obrigada", "you", "bye", "see you", "me too", "uh huh",
+                  "youre welcome", "all rights reserved", "legendas pela comunidade amara.org"}
+
+
+def junk_segment(seg):
+    """True for segments Whisper made up from noise, overlapping voices or silence."""
+    text = seg["text"].strip()
+    lp, ns = seg.get("avg_logprob", 0), seg.get("no_speech_prob", 0)
+    ws = seg.get("words", [])
+    mp = sum(w.get("probability", 1) for w in ws) / len(ws) if ws else 1
+    plain = re.sub(r"[^\w ]+", "", text.lower()).strip()
+    if lp < -1.0 or (lp < -0.9 and mp < 0.3):
+        return True
+    if re.search(r"[^\u0000-\u024F\u2000-\u206F€£]", text) or re.search(r"(.)\1{3,}", text):
+        return True  # other scripts, symbols, stuck characters
+    if plain in HALLUCINATIONS and (ns > 0.3 or mp < 0.6 or lp < -0.4):
+        return True
+    return len(plain.split()) <= 4 and ns > 0.3 and mp < 0.6
 
 
 def detect_lang(chunk, model, last_lang):
@@ -142,7 +159,8 @@ def collapse_repeats(words):
             while keys[i : i + n] == keys[i + reps * n : i + (reps + 1) * n] and len(keys[i : i + n]) == n:
                 reps += 1
             if reps >= need and all(keys[i : i + n]):
-                out.extend(words[i : i + n])
+                if reps < 6:
+                    out.extend(words[i : i + n])
                 i += reps * n
                 break
         else:
@@ -172,10 +190,7 @@ def transcribe_words(audio, prompt):
         for seg in res["segments"]:
             if seg.get("no_speech_prob", 0) > 0.6 and seg.get("avg_logprob", 0) < -1.0:
                 continue
-            if seg.get("avg_logprob", 0) < -1.2:
-                continue
-            if re.sub(r"[^\w ]+", "", seg["text"].lower()).strip() in HALLUCINATIONS and \
-                    seg.get("avg_logprob", 0) < -0.4:
+            if junk_segment(seg):
                 continue
             toks = [t for t in re.sub(r"[^\w ]+", "", seg["text"].lower()).split()]
             if len(toks) >= 8 and len(set(toks)) / len(toks) < 0.3:  # repetition loop
