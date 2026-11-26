@@ -2,7 +2,9 @@
 
 Usage: process_call.py <call_folder> <tmp_dir_with_me.wav_and_others.wav>
 """
+import difflib
 import os
+import re
 import subprocess
 import sys
 import time
@@ -75,29 +77,114 @@ def chunk_bounds(a, min_len=6, max_len=30, min_gap=0.5):
     return list(zip(bounds[:-1], bounds[1:]))
 
 
-def transcribe_words(audio, prompt):
-    """Per-chunk language detection (EN/PT), word timestamps. -> list of word dicts."""
-    import mlx_whisper
+PROMPTS = {
+    "pt": "Reunião de trabalho em português de Portugal, com termos técnicos em inglês (deploy, bucket, policy, "
+          "pipeline, backlog, sprint, wildcard). ",
+    "en": "Work meeting in English. ",
+}
+# Short fillers Whisper invents on silence/noise
+HALLUCINATIONS = {"okay", "ok", "thank you", "thanks", "thanks for watching", "obrigado", "obrigada", "you",
+                  "bye", "legendas pela comunidade amara.org"}
 
+
+def detect_lang(chunk, model, last_lang):
+    """Choose between PT and EN only (Whisper otherwise drifts to Korean, Spanish, ...)."""
+    import mlx.core as mx
+    from mlx_whisper.audio import N_FRAMES, log_mel_spectrogram, pad_or_trim
+
+    mel = log_mel_spectrogram(chunk, n_mels=model.dims.n_mels)
+    _, probs = model.detect_language(pad_or_trim(mel, N_FRAMES, axis=-2).astype(mx.float16))
+    pt, en = float(probs.get("pt", 0)), float(probs.get("en", 0))
+    if abs(pt - en) < 0.15:  # unsure: Portuguese speakers mostly stay in their language
+        return last_lang
+    return "pt" if pt > en else "en"
+
+
+def _rx(pattern, rep):
+    return re.compile(r"(?<!\w)(?:" + pattern + r")(?!\w)", re.I), rep
+
+
+# Heard wrongly in any language
+FIXES = [
+    _rx(r"yield attack|yodatact|data acton|dtac|datar|dataque|detacto|dat[ae]ct", "Data Act"),
+    _rx(r"fpc", "VPC"),
+    _rx(r"computador pc", "VPC"),
+    _rx(r"alamir", "Miriam"),
+    _rx(r"cris", "Chris"),
+    _rx(r"(?:subtitles by the amara\.org community|legendas pela comunidade amara\.org)\.?", ""),
+]
+# Spoken as the Portuguese/English word but heard differently (applied to Portuguese speech only)
+PT_FIXES = [
+    (re.compile(r"(?<!\w)(?:epic|ipic)(s?)(?!\w)", re.I), lambda m: "épico" + m.group(1)),
+    (re.compile(r"(?<!\w)(rog|roll)(s?)(?!\w)", re.I),
+     lambda m: ("Role" if m.group(1)[0].isupper() else "role") + m.group(2)),
+    _rx(r"taques", "tags"),
+    _rx(r"polistas", "policies"),
+    _rx(r"setaca|stag", "stack"),
+    _rx(r"cheque de ploys destaques", "check de deploys das stacks"),
+]
+
+
+def fix_text(text, lang):
+    for rx, rep in FIXES + (PT_FIXES if lang == "pt" else []):
+        text = rx.sub(rep, text)
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
+def collapse_repeats(words):
+    """Whisper loops ('E aí E aí E aí ...'): keep one copy of any 1-4 word phrase repeated back to back."""
+    norm = lambda w: re.sub(r"\W+", "", w["w"].lower())
+    keys = [norm(w) for w in words]
+    out, i = [], 0
+    while i < len(words):
+        for n in (1, 2, 3, 4):
+            need = 4 if n == 1 else 3
+            reps = 1
+            while keys[i : i + n] == keys[i + reps * n : i + (reps + 1) * n] and len(keys[i : i + n]) == n:
+                reps += 1
+            if reps >= need and all(keys[i : i + n]):
+                out.extend(words[i : i + n])
+                i += reps * n
+                break
+        else:
+            out.append(words[i])
+            i += 1
+    return out
+
+
+def transcribe_words(audio, prompt):
+    """Per-chunk language (PT/EN only), word timestamps. -> list of word dicts."""
+    import mlx_whisper
+    from mlx_whisper.transcribe import ModelHolder
+    import mlx.core as mx
+
+    model = ModelHolder.get_model(WHISPER, mx.float16)
     words, last_lang = [], "pt"
     for s, e in chunk_bounds(audio):
         chunk = audio[s:e]
         if len(chunk) < SR // 2 or float(np.sqrt((chunk**2).mean())) < 0.002:
             continue
-        kw = dict(path_or_hf_repo=WHISPER, word_timestamps=True, condition_on_previous_text=False,
-                  initial_prompt=prompt or None)
-        res = mlx_whisper.transcribe(chunk, **kw)
-        if res.get("language") not in ("en", "pt"):
-            res = mlx_whisper.transcribe(chunk, language=last_lang, **kw)
-        lang = res.get("language", last_lang)
+        lang = detect_lang(chunk, model, last_lang)
         last_lang = lang
+        res = mlx_whisper.transcribe(
+            chunk, path_or_hf_repo=WHISPER, word_timestamps=True, condition_on_previous_text=False,
+            language=lang, initial_prompt=PROMPTS[lang] + prompt, hallucination_silence_threshold=1.5,
+            compression_ratio_threshold=2.0, logprob_threshold=-0.8, no_speech_threshold=0.5)
         for seg in res["segments"]:
             if seg.get("no_speech_prob", 0) > 0.6 and seg.get("avg_logprob", 0) < -1.0:
+                continue
+            if seg.get("avg_logprob", 0) < -1.2:
+                continue
+            if re.sub(r"[^\w ]+", "", seg["text"].lower()).strip() in HALLUCINATIONS and \
+                    seg.get("avg_logprob", 0) < -0.4:
+                continue
+            toks = [t for t in re.sub(r"[^\w ]+", "", seg["text"].lower()).split()]
+            if len(toks) >= 8 and len(set(toks)) / len(toks) < 0.3:  # repetition loop
                 continue
             for w in seg.get("words", []):
                 words.append({"start": s / SR + w["start"], "end": s / SR + w["end"],
                               "w": w["word"], "lang": lang})
-    return words
+    return collapse_repeats(words)
 
 
 # ---------------------------------------------------------------- diarization
@@ -214,7 +301,6 @@ def utterances(words):
 
 def drop_echo(me_words, other_words):
     """If the mic picked up the other side through the speakers, drop that echo from 'Me'."""
-    import re
     norm = lambda t: re.sub(r"\W+", "", t.lower())
     other_words = sorted(other_words, key=lambda w: w["start"])
     out, buf = [], []
@@ -225,6 +311,10 @@ def drop_echo(me_words, other_words):
         win = {norm(w["w"]) for w in other_words if buf[0]["start"] - 1 <= w["start"] <= buf[-1]["end"] + 1}
         mine = [norm(w["w"]) for w in buf if norm(w["w"])]
         if len(mine) >= 3 and sum(x in win for x in mine) / len(mine) >= 0.7:
+            return
+        # same speech transcribed slightly differently on the mic track: compare as text
+        theirs = " ".join(norm(w["w"]) for w in other_words if buf[0]["start"] - 1 <= w["start"] <= buf[-1]["end"] + 1)
+        if len(mine) >= 4 and difflib.SequenceMatcher(None, " ".join(mine), theirs).ratio() >= 0.6:
             return
         out.extend(buf)
 
@@ -261,10 +351,15 @@ def main(folder, tmp):
         log("polishing")
         try:
             import polish
+            gl = polish.auto_glossary([u["text_raw"] for u in utts], gl, log)
             for u, t in zip(utts, polish.polish([u["text_raw"] for u in utts], gl, log)):
                 u["text"] = t
         except Exception as ex:
             log("polish failed, keeping raw text:", ex)
+
+    for u in utts:
+        u["text"] = fix_text(u["text"], u.get("lang"))
+    utts = [u for u in utts if u["text"]]
 
     seconds = max((len(x) for x in (me, others) if x is not None), default=0) / SR
     data = {"version": 1, "duration": round(seconds, 1), "utterances": utts, "clusters": clusters}
